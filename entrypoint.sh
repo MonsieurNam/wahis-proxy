@@ -1,10 +1,14 @@
 #!/bin/bash
 
-# Khởi động Selenium Server ở chế độ nền (background)
-/opt/bin/entry_point.sh &
+# Start Selenium Server in background
+java -jar /opt/selenium/selenium-server.jar standalone --port 4444 &
 
-# Đợi một vài giây để Selenium Server khởi động hoàn toàn
-sleep 5
+# Wait for Selenium to be ready
+echo "Waiting for Selenium Server to start..."
+until curl -s http://localhost:4444/wd/hub/status > /dev/null 2>&1; do
+    sleep 1
+done
+echo "Selenium Server is ready!"
 
-# Khởi động ứng dụng Gunicorn/Flask ở chế độ chính (foreground)
-exec gunicorn --bind 0.0.0.0:10000 proxy_app:app
+# Start Flask app
+exec gunicorn --bind 0.0.0.0:10000 --timeout 120 --workers 1 proxy_app:app
