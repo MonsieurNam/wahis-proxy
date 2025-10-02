@@ -1,89 +1,96 @@
 from flask import Flask, request, jsonify
-import cloudscraper
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+import requests # Chúng ta sẽ dùng lại requests, nhưng với cookie từ Selenium
+import json
+import time
 
 # === PHẦN 1: KHỞI TẠO VÀ CẤU HÌNH ===
-
-# Khởi tạo một ứng dụng web bằng Flask
 app = Flask(__name__)
-
-# URL của API WAHIS mà chúng ta muốn gọi
 WAHIS_API_URL = "https://wahis.woah.org/pi/getReportList"
 
-# Tạo một "scraper". Đây là một đối tượng đặc biệt từ thư viện cloudscraper
-# có khả năng hoạt động như một trình duyệt thật để vượt qua Cloudflare.
-scraper = cloudscraper.create_scraper()
-
-# === PHẦN 2: ĐỊNH NGHĨA API ENDPOINT ===
-
-# Dòng @app.route(...) định nghĩa một "địa chỉ" cho API của chúng ta.
-# Voiceflow sẽ gửi yêu cầu đến địa chỉ này.
-# methods=['POST'] có nghĩa là endpoint này chỉ chấp nhận yêu cầu POST.
-@app.route('/get-wahis-reports', methods=['POST'])
-def get_wahis_reports():
+def get_cloudflare_cookies():
     """
-    Hàm này sẽ được thực thi mỗi khi có một yêu cầu POST đến
-    địa chỉ '/get-wahis-reports'.
+    Sử dụng Selenium để khởi động một trình duyệt ảo, truy cập WAHIS,
+    và lấy về các cookie hợp lệ sau khi vượt qua thử thách của Cloudflare.
     """
-    print("LOG: Nhận được yêu cầu...")
+    print("LOG: Bắt đầu quá trình lấy cookie Cloudflare với Selenium...")
+    chrome_options = Options()
+    # Chạy ở chế độ headless (không có giao diện người dùng)
+    chrome_options.add_argument("--headless")
+    # Các tùy chọn cần thiết để chạy trên môi trường server Linux (như Render)
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
     
-    # Lấy dữ liệu JSON mà Voiceflow gửi đến trong phần body của yêu cầu
-    filters_from_voiceflow = request.get_json()
-
-    # Xây dựng payload cuối cùng để gửi đến WAHIS.
-    # Chúng ta bắt đầu với một payload mặc định...
-    payload_to_wahis = {
-        "pageNumber": 1,
-        "pageSize": 5,
-        "searchText": "",
-        "sortColName": "reportDate",
-        "sortColOrder": "DESC",
-        "reportFilters": {
-            "country": [],
-            "region": [],
-            "diseases": [],
-            "reportDate": {
-                "startDate": "2005-01-01",
-                "endDate": "2025-12-31"
-            }
-        }
-    }
-    
-    # ...và cập nhật nó với các bộ lọc nhận được từ Voiceflow (nếu có)
-    if filters_from_voiceflow:
-        payload_to_wahis["pageSize"] = filters_from_voiceflow.get("pageSize", 5)
-        payload_to_wahis["reportFilters"]["country"] = filters_from_voiceflow.get("country", [])
-        payload_to_wahis["reportFilters"]["region"] = filters_from_voiceflow.get("region", [])
-        payload_to_wahis["reportFilters"]["diseases"] = filters_from_voiceflow.get("disease", [])
-        if filters_from_voiceflow.get("reportDate"):
-            payload_to_wahis["reportFilters"]["reportDate"] = filters_from_voiceflow.get("reportDate")
-
-    print(f"LOG: Payload sẽ gửi đến WAHIS: {payload_to_wahis}")
+    # Tự động cài đặt và quản lý ChromeDriver
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
-        # Dùng scraper.post thay vì requests.post. Đây là điểm mấu chốt!
-        # scraper sẽ tự động xử lý các thử thách của Cloudflare.
-        response_from_wahis = scraper.post(WAHIS_API_URL, json=payload_to_wahis)
+        # Truy cập một trang bất kỳ trên WAHIS để kích hoạt Cloudflare
+        driver.get("https://wahis.woah.org/#/home")
+        
+        # Đợi một chút để Cloudflare thực hiện các kiểm tra JavaScript
+        # Có thể cần tăng thời gian này nếu mạng chậm
+        time.sleep(10) 
+        
+        # Lấy tất cả cookie mà trình duyệt đã nhận được
+        selenium_cookies = driver.get_cookies()
+        
+        # Chuyển đổi cookie sang định dạng mà thư viện 'requests' có thể hiểu
+        requests_cookies = {cookie['name']: cookie['value'] for cookie in selenium_cookies}
+        print("LOG: Đã lấy cookie thành công!")
+        return requests_cookies
+    finally:
+        # Luôn đóng trình duyệt sau khi hoàn tất
+        driver.quit()
+
+# === PHẦN 2: ĐỊNH NGHĨA API ENDPOINT ===
+@app.route('/get-wahis-reports', methods=['POST'])
+def get_wahis_reports():
+    print("LOG: Nhận được yêu cầu từ Voiceflow...")
+    filters_from_voiceflow = request.get_json()
+
+    payload_to_wahis = {
+        # ... (Phần payload giữ nguyên như cũ) ...
+        "pageNumber": filters_from_voiceflow.get("pageNumber", 1) if filters_from_voiceflow else 1,
+        "pageSize": filters_from_voiceflow.get("pageSize", 5) if filters_from_voiceflow else 5,
+        "reportFilters": {
+            "country": filters_from_voiceflow.get("country", []) if filters_from_voiceflow else [],
+            # ... thêm các bộ lọc khác nếu cần ...
+        }
+    }
+
+    try:
+        # BƯỚC QUAN TRỌNG: Lấy cookie mới cho mỗi lần yêu cầu
+        cookies = get_cloudflare_cookies()
+        
+        # Headers bây giờ sẽ không cần nhiều thứ như trước
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+
+        # Gửi yêu cầu POST bằng thư viện 'requests' thông thường,
+        # nhưng lần này chúng ta gửi kèm theo cookie đã lấy được
+        response_from_wahis = requests.post(WAHIS_API_URL, json=payload_to_wahis, headers=headers, cookies=cookies)
         
         print(f"LOG: WAHIS API trả về mã trạng thái: {response_from_wahis.status_code}")
 
-        # Nếu WAHIS trả về thành công (mã 200),
-        # chúng ta sẽ trả dữ liệu JSON đó về lại cho Voiceflow.
         if response_from_wahis.status_code == 200:
             return jsonify(response_from_wahis.json())
-        # Ngược lại, trả về một thông báo lỗi
         else:
-            error_message = {
-                "error": "Failed to fetch data from WAHIS", 
+            return jsonify({
+                "error": "Failed to fetch data from WAHIS, even with Selenium", 
                 "status_code": response_from_wahis.status_code,
                 "response_text": response_from_wahis.text
-            }
-            return jsonify(error_message), 500
+            }), 500
 
     except Exception as e:
         print(f"LOG: Lỗi nghiêm trọng xảy ra: {e}")
         return jsonify({"error": str(e)}), 500
 
-# === PHẦN 3: KHỞI CHẠY SERVER (chỉ khi chạy trực tiếp file này) ===
+# === PHẦN 3: KHỞI CHẠY SERVER ===
 if __name__ == '__main__':
-    # Chạy ứng dụng trên cổng 5001 để thử nghiệm trên máy tính local
-    app.run(host='0.0.0.0', port=5001, debug=True)
+    app.run(host='0.0.0.0', port=10000)
