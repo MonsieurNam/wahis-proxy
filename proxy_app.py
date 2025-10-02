@@ -13,16 +13,18 @@ WAHIS_API_URL = "https://wahis.woah.org/pi/getReportList"
 def get_cloudflare_cookies():
     print("LOG: Bắt đầu quá trình lấy cookie Cloudflare với Selenium...")
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920x1080")
+    chrome_options.add_argument("--disable-software-rasterizer")
+    chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     
-    # Use local ChromeDriver instead of Remote WebDriver
-    # The Selenium standalone image has chromedriver available
-    driver = webdriver.Chrome(options=chrome_options)
+    # Specify ChromeDriver path explicitly
+    service = Service('/usr/local/bin/chromedriver')
+    driver = webdriver.Chrome(service=service, options=chrome_options)
 
     try:
         driver.get("https://wahis.woah.org/#/home")
