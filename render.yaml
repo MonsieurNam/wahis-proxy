@@ -4,26 +4,15 @@ services:
     env: python
     plan: free
     
-    # === CÁC THAY ĐỔI QUAN TRỌNG NẰM Ở ĐÂY ===
+    # === THAY ĐỔI QUAN TRỌNG ===
     
-    # 1. Thêm một "buildFilter" để chỉ định các file cần theo dõi
-    buildFilter:
-      paths:
-      - "proxy_app.py"
-      - "requirements.txt"
-      
-    # 2. Định nghĩa môi trường build và runtime
-    runtime: native
+    # 1. buildCommand bây giờ chỉ cần thực thi file build.sh
+    buildCommand: "./build.sh"
     
-    # 3. Di chuyển các lệnh build vào trong "buildCommand"
-    buildCommand: |
-      apt-get update && apt-get install -y google-chrome-stable libnss3 libxss1
-      pip install -r requirements.txt
-      
-    # 4. Giữ nguyên startCommand
-    startCommand: gunicorn proxy_app:app
+    # 2. Giữ nguyên startCommand
+    startCommand: "gunicorn proxy_app:app"
     
-    # 5. Giữ nguyên biến môi trường
+    # 3. Giữ nguyên biến môi trường
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.5
