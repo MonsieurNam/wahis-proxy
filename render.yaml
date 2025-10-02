@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: wahis-proxy-service # Bạn có thể đổi tên này nếu muốn
+    env: python
+    plan: free # Sử dụng gói miễn phí
+    buildCommand: |
+      pip install -r requirements.txt
+    startCommand: gunicorn proxy_app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.5 # Chỉ định phiên bản Python để đảm bảo tính ổn định
+    build:
+      # Phần này yêu cầu Render cài đặt các gói cần thiết để chạy Chrome
+      packages:
+        - google-chrome-stable
+        - fontconfig
+        - libfontconfig1
+        - libx11-6
+        - libx11-xcb1
+        - libxcb1
+        - libxcomposite1
+        - libxcursor1
+        - libxdamage1
+        - libxext6
+        - libxfixes3
+        - libxi6
+        - libxrandr2
+        - libxrender1
+        - libxss1
+        - libxtst6
+        - libnss3
