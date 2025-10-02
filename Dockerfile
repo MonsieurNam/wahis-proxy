@@ -1,24 +1,27 @@
-# Bắt đầu từ một image Docker chính thức của Selenium
-# Image này đã có sẵn: Python, Google Chrome, và ChromeDriver được cấu hình hoàn chỉnh.
+# Bắt đầu từ image Docker chính thức của Selenium
 FROM selenium/standalone-chrome:latest
 
-# Chuyển sang người dùng root để cài đặt các thư viện Python
+# Chuyển sang người dùng root
 USER root
 
-# Thiết lập thư mục làm việc bên trong container
+# Thiết lập thư mục làm việc
 WORKDIR /app
 
-# Sao chép file requirements.txt vào
+# Sao chép các file requirements và entrypoint
 COPY requirements.txt .
+COPY entrypoint.sh .
 
-# Cài đặt các thư viện Python cần thiết (Flask, gunicorn, cloudscraper)
+# Cấp quyền thực thi cho file entrypoint.sh
+RUN chmod +x entrypoint.sh
+
+# Cài đặt các thư viện Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Sao chép file code ứng dụng của bạn vào
+# Sao chép file code ứng dụng
 COPY proxy_app.py .
 
-# Mở cổng mà Gunicorn sẽ chạy
+# Mở cổng 10000
 EXPOSE 10000
 
-# Lệnh để chạy ứng dụng khi container khởi động
-CMD ["gunicorn", "--bind", "0.0.0.0:10000", "proxy_app:app"]
+# Lệnh cuối cùng: Chạy file entrypoint.sh khi container khởi động
+CMD ["./entrypoint.sh"]
